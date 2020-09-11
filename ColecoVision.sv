@@ -265,8 +265,8 @@ gpu gpu_inst
 	
 	.gpuAdrA2(gpuAdrA2) ,			// input  gpuAdrA2
 	.gpuSel(gpuSel) ,					// input  gpuSel
-	.write(write) ,					// input  write
-	.read(read) ,						// input  read
+	.write(gpu_write) ,				// input  write
+	.read(gpu_read) ,					// input  read
 	.cpuDataIn(cpuDataIn) ,			// input [31:0] cpuDataIn
 	.cpuDataOut(cpuDataOut) ,		// output [31:0] cpuDataOut
 	.validDataOut(validDataOut) 	// output  validDataOut
@@ -282,6 +282,52 @@ wire [15:0] o_writeMask;
 wire [255:0] i_dataIn = o_dataClient;
 wire i_dataInValid = o_dataValidClient;
 wire [255:0] o_dataOut;
+
+reg gpuAdrA2;
+reg gpuSel;
+reg gpu_write;
+reg gpu_read;
+reg [31:0] cpuDataIn;
+wire [31:0] cpuDataOut;
+wire validDataOut;
+
+reg [7:0] cmd_state;
+
+always @(posedge clk_sys or posedge reset)
+if (reset) begin
+	gpuAdrA2 = 1'b0;
+	gpuSel = 1'b0;
+	gpu_write = 1'b0;
+	gpu_read = 1'b0;
+	cpuDataIn = 32'h00000000;
+	
+	cmd_state <= 8'd0;
+end
+else begin
+	case (cmd_state)
+		0: begin
+			gpuAdrA2 = 1'b0;
+			gpuSel = 1'b1;
+			gpu_write = 1'b1;
+			gpu_read = 1'b0;
+			cpuDataIn = 32'h00000001;
+			cmd_state <= cmd_state + 1;
+		end
+		
+		1: begin
+			gpuAdrA2 = 1'b0;
+			gpuSel = 1'b0;
+			gpu_write = 1'b0;
+			gpu_read = 1'b0;
+			cpuDataIn = 32'h00000000;
+			cmd_state <= cmd_state + 1;
+		end
+	
+		default: ;
+	endcase
+end
+
+
 
 
 wire i_command = o_command;
