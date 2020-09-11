@@ -1,17 +1,4 @@
----------------------------------------------------------------------------------
---
--- ColecoVision port to MiSTer by Sorgelig
--- 05 November 2017
---
----------------------------------------------------------------------------------
---
--- Original core https://github.com/wsoltys/mist-cores/tree/master/fpga_colecovision
---
----------------------------------------------------------------------------------
---
---   Put *.col/*.bin files into Coleco folder
---
---   Joystick support.
---
----------------------------------------------------------------------------------
+Template project for testing Laxer's PSX GPU core with agunter7's DDR controller core.
+
+
  

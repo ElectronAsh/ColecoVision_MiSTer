@@ -127,7 +127,7 @@ assign ADC_BUS = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
+//assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
  
 assign LED_USER  = ioctl_download;
 assign LED_DISK  = 0;
@@ -219,59 +219,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 wire reset = RESET | status[0] | buttons[1] | ioctl_download;
 
-/////////////////  Memory  ////////////////////////
-
-wire [12:0] bios_a;
-wire  [7:0] bios_d;
-
-spram #(13,8,"rtl/bios.mif") rom
-(
-	.clock(clk_sys),
-	.address(bios_a),
-	.q(bios_d)
-);
-
-wire [14:0] cpu_ram_a;
-wire        ram_we_n, ram_ce_n;
-wire  [7:0] ram_di;
-wire  [7:0] ram_do;
-
-wire [14:0] ram_a = (extram)            ? cpu_ram_a       :
-                    (status[5:4] == 1)  ? cpu_ram_a[12:0] : // 8k
-                    (status[5:4] == 0)  ? cpu_ram_a[9:0]  : // 1k
-                    (sg1000)            ? cpu_ram_a[12:0] : // SGM means 8k on SG1000
-                                          cpu_ram_a;        // SGM/32k
-
-spram #(15) ram
-(
-	.clock(clk_sys),
-	.address(ram_a),
-	.wren(ce_10m7 & ~(ram_we_n | ram_ce_n)),
-	.data(ram_do),
-	.q(ram_di)
-);
-
-wire [13:0] vram_a;
-wire        vram_we;
-wire  [7:0] vram_di;
-wire  [7:0] vram_do;
-
-spram #(14) vram
-(
-	.clock(clk_sys),
-	.address(vram_a),
-	.wren(vram_we),
-	.data(vram_do),
-	.q(vram_di)
-);
-
-wire [19:0] cart_a;
-wire  [7:0] cart_d;
-wire        cart_rd;
-
-reg [5:0] cart_pages;
-always @(posedge clk_sys) if(ioctl_wr) cart_pages <= ioctl_addr[19:14];
-
+/*
 assign SDRAM_CLK = ~clk_sys;
 sdram sdram
 (
@@ -287,97 +235,114 @@ sdram sdram
    .we(ioctl_wr),
    .ready()
 );
+*/
 
-reg sg1000 = 0;
-reg extram = 0;
-always @(posedge clk_sys) begin
-	if(ioctl_wr) begin
-		if(!ioctl_addr) begin
-			extram <= 0;
-			sg1000 <= (ioctl_index[4:0] == 2);
-		end
-		if(ioctl_addr[24:13] == 1 && sg1000) extram <= (!ioctl_addr[12:0] | extram) & &ioctl_dout; // 2000-3FFF on SG-1000
-	end
-end
-
-
-////////////////  Console  ////////////////////////
-
-wire [10:0] audio;
-assign AUDIO_L = {audio,5'd0};
-assign AUDIO_R = {audio,5'd0};
-assign AUDIO_S = 0;
-assign AUDIO_MIX = 0;
-
-assign CLK_VIDEO = clk_sys;
-
-wire [1:0] ctrl_p1;
-wire [1:0] ctrl_p2;
-wire [1:0] ctrl_p3;
-wire [1:0] ctrl_p4;
-wire [1:0] ctrl_p5;
-wire [1:0] ctrl_p6;
-wire [1:0] ctrl_p7 = 2'b11;
-wire [1:0] ctrl_p8;
-wire [1:0] ctrl_p9 = 2'b11;
-
-wire [7:0] R,G,B;
-wire hblank, vblank;
-wire hsync, vsync;
-
-wire [31:0] joya = status[3] ? joy1 : joy0;
-wire [31:0] joyb = status[3] ? joy0 : joy1;
-
-cv_console console
+gpu gpu_inst
 (
-	.clk_i(clk_sys),
-	.clk_en_10m7_i(ce_10m7),
-	.reset_n_i(~reset),
-	.por_n_o(),
-	.sg1000(sg1000),
-	.dahjeeA_i(extram),
-
-	.ctrl_p1_i(ctrl_p1),
-	.ctrl_p2_i(ctrl_p2),
-	.ctrl_p3_i(ctrl_p3),
-	.ctrl_p4_i(ctrl_p4),
-	.ctrl_p5_o(ctrl_p5),
-	.ctrl_p6_i(ctrl_p6),
-	.ctrl_p7_i(ctrl_p7),
-	.ctrl_p8_o(ctrl_p8),
-	.ctrl_p9_i(ctrl_p9),
-	.joy0_i(~{|joya[19:6], 1'b0, joya[5:0]}),
-	.joy1_i(~{|joyb[19:6], 1'b0, joyb[5:0]}),
-
-	.bios_rom_a_o(bios_a),
-	.bios_rom_d_i(bios_d),
-
-	.cpu_ram_a_o(cpu_ram_a),
-	.cpu_ram_we_n_o(ram_we_n),
-	.cpu_ram_ce_n_o(ram_ce_n),
-	.cpu_ram_d_i(ram_di),
-	.cpu_ram_d_o(ram_do),
-
-	.vram_a_o(vram_a),
-	.vram_we_o(vram_we),
-	.vram_d_o(vram_do),
-	.vram_d_i(vram_di),
-
-	.cart_pages_i(cart_pages),
-	.cart_a_o(cart_a),
-	.cart_d_i(cart_d),
-	.cart_rd(cart_rd),
-
-	.rgb_r_o(R),
-	.rgb_g_o(G),
-	.rgb_b_o(B),
-	.hsync_n_o(hsync),
-	.vsync_n_o(vsync),
-	.hblank_o(hblank),
-	.vblank_o(vblank),
-
-	.audio_o(audio)
+	.clk( clk_sys ) ,					// input  clk
+	.i_nrst( !reset ) ,				// input  i_nrst
+	
+	.IRQRequest(IRQRequest) ,		// output  IRQRequest
+	
+	.DMA_REQ(DMA_REQ) ,				// output  DMA_REQ
+	.DMA_ACK( 1'b0 ) ,				// input  DMA_ACK
+	
+	.mydebugCnt(mydebugCnt) ,		// output [31:0] mydebugCnt
+	.dbg_canWrite(dbg_canWrite) ,	// output  dbg_canWrite
+	
+	.clkBus( clk_sys ) ,				// input  clkBus
+	
+	.o_command(o_command) ,			// output  o_command
+	.i_busy(i_busy) ,					// input  i_busy
+	.o_commandSize(o_commandSize) ,	// output [1:0] o_commandSize
+	.o_write(o_write) ,				// output  o_write
+	.o_adr(o_adr) ,					// output [14:0] o_adr
+	.o_subadr(o_subadr) ,			// output [2:0] o_subadr
+	.o_writeMask(o_writeMask) ,	// output [15:0] o_writeMask
+	.i_dataIn(i_dataIn) ,			// input [255:0] i_dataIn
+	.i_dataInValid(i_dataInValid) ,	// input  i_dataInValid
+	.o_dataOut(o_dataOut) ,			// output [255:0] o_dataOut
+	
+	.gpuAdrA2(gpuAdrA2) ,			// input  gpuAdrA2
+	.gpuSel(gpuSel) ,					// input  gpuSel
+	.write(write) ,					// input  write
+	.read(read) ,						// input  read
+	.cpuDataIn(cpuDataIn) ,			// input [31:0] cpuDataIn
+	.cpuDataOut(cpuDataOut) ,		// output [31:0] cpuDataOut
+	.validDataOut(validDataOut) 	// output  validDataOut
 );
+
+wire o_command;
+wire i_busy = o_busyClient;
+wire [1:0] o_commandSize;
+wire o_write;
+wire [14:0] o_adr;
+wire [2:0] o_subadr;
+wire [15:0] o_writeMask;
+wire [255:0] i_dataIn = o_dataClient;
+wire i_dataInValid = o_dataValidClient;
+wire [255:0] o_dataOut;
+
+
+wire i_command = o_command;
+wire i_writeElseRead = o_write;
+wire [1:0] i_commandSize = o_commandSize;
+wire [14:0] i_targetAddr = o_adr;
+wire [2:0] i_subAddr = o_subadr;
+wire [15:0] i_writeMask = o_writeMask;
+wire [255:0] i_dataClient = o_dataOut;
+
+wire o_busyClient;
+wire o_dataValidClient;
+wire [255:0] o_dataClient;
+
+PSX_DDR_Interface PSX_DDR_Interface_inst
+(
+	.i_clk( clk_sys ) ,						// input  i_clk
+	.i_rst( !reset ) ,						// input  i_rst
+	
+	.i_command(i_command) ,					// input  i_command
+	.i_writeElseRead(i_writeElseRead) ,	// input  i_writeElseRead
+	.i_commandSize(i_commandSize) ,		// input [1:0] i_commandSize
+	.i_targetAddr(i_targetAddr) ,			// input [14:0] i_targetAddr
+	.i_subAddr(i_subAddr) ,					// input [2:0] i_subAddr
+	.i_writeMask(i_writeMask) ,			// input [15:0] i_writeMask
+	.i_dataClient(i_dataClient) ,			// input [255:0] i_dataClient
+	.o_busyClient(o_busyClient) ,			// output  o_busyClient
+	.o_dataValidClient(o_dataValidClient) ,	// output  o_dataValidClient
+	.o_dataClient(o_dataClient) ,			// output [255:0] o_dataClient
+	
+	.i_busyMem(i_busyMem) ,					// input  i_busyMem
+	.i_dataValidMem(i_dataValidMem) ,	// input  i_dataValidMem
+	.i_dataMem(i_dataMem) ,					// input [31:0] i_dataMem
+	.o_writeEnableMem(o_writeEnableMem) ,	// output  o_writeEnableMem
+	.o_readEnableMem(o_readEnableMem) ,	// output  o_readEnableMem
+	.o_burstLength(o_burstLength) ,		// output [7:0] o_burstLength
+	.o_dataMem(o_dataMem) ,					// output [31:0] o_dataMem
+	.o_targetAddr(o_targetAddr) ,			// output [25:0] o_targetAddr
+	.o_byteEnableMem(o_byteEnableMem) 	// output [3:0] o_byteEnableMem
+);
+
+wire i_busyMem = DDRAM_BUSY;
+wire i_dataValidMem = DDRAM_DOUT_READY;
+wire [31:0] i_dataMem = DDRAM_DOUT[31:0];	// Note: DDRAM_DOUT is 64-bit.
+wire o_writeEnableMem;
+wire o_readEnableMem;
+wire [7:0] o_burstLength;
+wire [31:0] o_dataMem;
+wire [25:0] o_targetAddr;
+wire [3:0] o_byteEnableMem;
+
+
+assign DDRAM_CLK = clk_sys;
+assign DDRAM_BURSTCNT = o_burstLength;
+assign DDRAM_ADDR = {3'b001, o_targetAddr};	// Not sure where to map this yet? ElectronAsh.
+assign DDRAM_DIN = DDRAM_DIN;						// Note: DDRAM_DIN is 64-bit.
+assign DDRAM_BE = {4'b0000, o_byteEnableMem};// Note: DDRAM_BE has 8 bits.
+assign DDRAM_WR = o_writeEnableMem;
+assign DDRAM_RD = o_readEnableMem;
+
+
 
 assign VGA_F1 = 0;
 assign VGA_SL = sl[1:0];
@@ -385,11 +350,13 @@ assign VGA_SL = sl[1:0];
 wire [2:0] scale = status[9:7];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 
+/*
 reg hs_o, vs_o;
 always @(posedge CLK_VIDEO) begin
 	hs_o <= ~hsync;
 	if(~hs_o & ~hsync) vs_o <= ~vsync;
 end
+*/
 
 video_mixer #(.LINE_LENGTH(290), .GAMMA(1)) video_mixer
 (
@@ -415,78 +382,6 @@ video_mixer #(.LINE_LENGTH(290), .GAMMA(1)) video_mixer
 	.HBlank(hblank),
 	.VBlank(vblank)
 );
-
-
-
-////////////////  Control  ////////////////////////
-
-wire [0:19] keypad0 = {joya[8],joya[9],joya[10],joya[11],joya[12],joya[13],joya[14],joya[15],joya[16],joya[17],joya[6],joya[7],joya[18],joya[19],joya[3],joya[2],joya[1],joya[0],joya[4],joya[5]};
-wire [0:19] keypad1 = {joyb[8],joyb[9],joyb[10],joyb[11],joyb[12],joyb[13],joyb[14],joyb[15],joyb[16],joyb[17],joyb[6],joyb[7],joyb[18],joyb[19],joyb[3],joyb[2],joyb[1],joyb[0],joyb[4],joyb[5]};
-wire [0:19] keypad[2] = '{keypad0,keypad1};
-
-reg [3:0] ctrl1[2] = '{'0,'0};
-assign {ctrl_p1[0],ctrl_p2[0],ctrl_p3[0],ctrl_p4[0]} = ctrl1[0];
-assign {ctrl_p1[1],ctrl_p2[1],ctrl_p3[1],ctrl_p4[1]} = ctrl1[1];
-
-localparam cv_key_0_c        = 4'b0011;
-localparam cv_key_1_c        = 4'b1110;
-localparam cv_key_2_c        = 4'b1101;
-localparam cv_key_3_c        = 4'b0110;
-localparam cv_key_4_c        = 4'b0001;
-localparam cv_key_5_c        = 4'b1001;
-localparam cv_key_6_c        = 4'b0111;
-localparam cv_key_7_c        = 4'b1100;
-localparam cv_key_8_c        = 4'b1000;
-localparam cv_key_9_c        = 4'b1011;
-localparam cv_key_asterisk_c = 4'b1010;
-localparam cv_key_number_c   = 4'b0101;
-localparam cv_key_pt_c       = 4'b0100;
-localparam cv_key_bt_c       = 4'b0010;
-localparam cv_key_none_c     = 4'b1111;
-
-generate 
-	genvar i;
-	for (i = 0; i <= 1; i++) begin : ctl
-		always_comb begin
-			reg [3:0] ctl1, ctl2;
-			reg p61,p62;
-			
-			ctl1 = 4'b1111;
-			ctl2 = 4'b1111;
-			p61 = 1;
-			p62 = 1;
-
-			if (~ctrl_p5[i]) begin
-				casex(keypad[i][0:13]) 
-					'b1xxxxxxxxxxxxx: ctl1 = cv_key_0_c;
-					'b01xxxxxxxxxxxx: ctl1 = cv_key_1_c;
-					'b001xxxxxxxxxxx: ctl1 = cv_key_2_c;
-					'b0001xxxxxxxxxx: ctl1 = cv_key_3_c;
-					'b00001xxxxxxxxx: ctl1 = cv_key_4_c;
-					'b000001xxxxxxxx: ctl1 = cv_key_5_c;
-					'b0000001xxxxxxx: ctl1 = cv_key_6_c;
-					'b00000001xxxxxx: ctl1 = cv_key_7_c;
-					'b000000001xxxxx: ctl1 = cv_key_8_c;
-					'b0000000001xxxx: ctl1 = cv_key_9_c;
-					'b00000000001xxx: ctl1 = cv_key_asterisk_c;
-					'b000000000001xx: ctl1 = cv_key_number_c;
-					'b0000000000001x: ctl1 = cv_key_pt_c;
-					'b00000000000001: ctl1 = cv_key_bt_c;
-					'b00000000000000: ctl1 = cv_key_none_c;
-				endcase
-				p61 = ~keypad[i][19]; // button 2
-			end
-
-			if (~ctrl_p8[i]) begin
-				ctl2 = ~keypad[i][14:17];
-				p62 = ~keypad[i][18];  // button 1
-			end
-			
-			ctrl1[i] = ctl1 & ctl2;
-			ctrl_p6[i] = p61 & p62;
-		end
-	end
-endgenerate
 
 
 endmodule

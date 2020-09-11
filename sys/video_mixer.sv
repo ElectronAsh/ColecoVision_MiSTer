@@ -130,7 +130,11 @@ wire hs_sd, vs_sd, hb_sd, vb_sd, ce_pix_sd;
 
 scandoubler #(.LENGTH(LINE_LENGTH), .HALF_DEPTH(HALF_DEPTH_SD)) sd
 (
-	.*,
+	.clk_vid(clk_vid),
+	.ce_pix(ce_pix),
+
+	.hq2x(hq2x),
+
 	.hs_in(hs_g),
 	.vs_in(vs_g),
 	.hb_in(hb_g),
